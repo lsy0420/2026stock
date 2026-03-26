@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="주식 비교 분석", layout="wide")
 
@@ -25,18 +24,18 @@ us_stocks = {
 }
 
 # -------------------------------
-# 사용자 선택
+# 사이드바 설정
 # -------------------------------
 st.sidebar.header("📌 종목 선택")
 
 selected_kor = st.sidebar.multiselect(
-    "한국 주식 선택",
+    "한국 주식",
     list(korean_stocks.keys()),
     default=["삼성전자"]
 )
 
 selected_us = st.sidebar.multiselect(
-    "미국 주식 선택",
+    "미국 주식",
     list(us_stocks.keys()),
     default=["Apple"]
 )
@@ -48,7 +47,7 @@ period = st.sidebar.selectbox(
 )
 
 # -------------------------------
-# 데이터 가져오기
+# 티커 정리
 # -------------------------------
 tickers = []
 
@@ -62,7 +61,31 @@ if len(tickers) == 0:
     st.warning("종목을 하나 이상 선택하세요!")
     st.stop()
 
-data = yf.download(tickers, period=period)["Adj Close"]
+# -------------------------------
+# 데이터 다운로드
+# -------------------------------
+with st.spinner("데이터 불러오는 중..."):
+    data = yf.download(tickers, period=period)
+
+# -------------------------------
+# Close 데이터 안전 처리 (핵심🔥)
+# -------------------------------
+try:
+    if isinstance(data.columns, pd.MultiIndex):
+        data = data["Close"]
+    else:
+        data = data[["Close"]]
+except KeyError:
+    st.error("데이터를 불러오지 못했습니다. 다른 종목을 선택해보세요.")
+    st.stop()
+
+# -------------------------------
+# 컬럼 이름 정리
+# -------------------------------
+if len(tickers) == 1:
+    data.columns = tickers
+else:
+    data.columns = data.columns
 
 # -------------------------------
 # 수익률 계산
@@ -70,45 +93,31 @@ data = yf.download(tickers, period=period)["Adj Close"]
 returns = (data / data.iloc[0] - 1) * 100
 
 # -------------------------------
-# 그래프 출력
+# 수익률 그래프
 # -------------------------------
 st.subheader("📊 수익률 비교 (%)")
-
-fig, ax = plt.subplots(figsize=(10, 5))
-
-for col in returns.columns:
-    ax.plot(returns.index, returns[col], label=col)
-
-ax.set_ylabel("수익률 (%)")
-ax.legend()
-ax.grid()
-
-st.pyplot(fig)
+st.line_chart(returns)
 
 # -------------------------------
 # 데이터 테이블
 # -------------------------------
-st.subheader("📋 수익률 데이터")
-
+st.subheader("📋 최근 데이터")
 st.dataframe(returns.tail())
 
 # -------------------------------
-# 개별 종목 상세 보기
+# 개별 종목 상세 분석
 # -------------------------------
-st.subheader("🔍 개별 종목 상세 분석")
+st.subheader("🔍 개별 종목 분석")
 
 selected_detail = st.selectbox(
     "종목 선택",
     tickers
 )
 
-detail_data = yf.download(selected_detail, period=period)
+detail = yf.download(selected_detail, period=period)
 
-fig2, ax2 = plt.subplots(figsize=(10, 4))
-ax2.plot(detail_data.index, detail_data["Close"])
-ax2.set_title(f"{selected_detail} 가격")
-ax2.grid()
+st.subheader(f"{selected_detail} 가격 차트")
 
-st.pyplot(fig2)
+st.line_chart(detail["Close"])
 
-st.write(detail_data.tail())
+st.write(detail.tail())
